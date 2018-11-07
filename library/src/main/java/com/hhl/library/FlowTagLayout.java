@@ -305,6 +305,7 @@ public class FlowTagLayout extends ViewGroup {
             mDataSetObserver = new AdapterDataSetObserver();
             mAdapter.registerDataSetObserver(mDataSetObserver);
         }
+        reloadData();
     }
 
     /**

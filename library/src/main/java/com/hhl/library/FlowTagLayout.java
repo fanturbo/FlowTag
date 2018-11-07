@@ -2,6 +2,7 @@ package com.hhl.library;
 
 import android.content.Context;
 import android.database.DataSetObserver;
+import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.util.SparseBooleanArray;
 import android.view.View;
@@ -65,6 +66,10 @@ public class FlowTagLayout extends ViewGroup {
      * 存储选中的tag
      */
     private SparseBooleanArray mCheckedTagArray = new SparseBooleanArray();
+    /**
+     * 用来保存计算好的子view的位置
+     */
+    List<Rect> mChildrenBounds = new ArrayList<>();
 
     public FlowTagLayout(Context context) {
         super(context);
@@ -102,82 +107,51 @@ public class FlowTagLayout extends ViewGroup {
         for (int i = 0, childCount = getChildCount(); i < childCount; i++) {
             View childView = getChildAt(i);
             //测量每一个子view的宽和高
-            measureChild(childView, widthMeasureSpec, heightMeasureSpec);
+            measureChildWithMargins(childView, widthMeasureSpec, 0, heightMeasureSpec, resultHeight);
 
             //获取到测量的宽和高
             int childWidth = childView.getMeasuredWidth();
             int childHeight = childView.getMeasuredHeight();
 
-            //因为子View可能设置margin，这里要加上margin的距离
-            MarginLayoutParams mlp = (MarginLayoutParams) childView.getLayoutParams();
-            int realChildWidth = childWidth + mlp.leftMargin + mlp.rightMargin;
-            int realChildHeight = childHeight + mlp.topMargin + mlp.bottomMargin;
-
+            Rect childBound;
+            if (mChildrenBounds.size() <= i) {
+                childBound = new Rect();
+                mChildrenBounds.add(childBound);
+            } else {
+                childBound = mChildrenBounds.get(i);
+            }
             //如果当前一行的宽度加上要加入的子view的宽度大于父容器给的宽度，就换行
-            if ((lineWidth + realChildWidth) > sizeWidth) {
+            if ((lineWidth + childWidth) > sizeWidth) {
+                childBound.set(0, resultHeight, childWidth, resultHeight + childHeight);
                 //换行
-                resultWidth = Math.max(lineWidth, realChildWidth);
-                resultHeight += realChildHeight;
+                resultWidth = Math.max(lineWidth, childWidth);
+                resultHeight += childHeight;
                 //换行了，lineWidth和lineHeight重新算
-                lineWidth = realChildWidth;
-                lineHeight = realChildHeight;
+                lineWidth = childWidth;
+                lineHeight = childHeight;
+
             } else {
                 //不换行，直接相加
-                lineWidth += realChildWidth;
+                lineWidth += childWidth;
                 //每一行的高度取二者最大值
-                lineHeight = Math.max(lineHeight, realChildHeight);
-            }
-
-            //遍历到最后一个的时候，肯定走的是不换行
-            if (i == childCount - 1) {
+                lineHeight = Math.max(lineHeight, childHeight);
                 resultWidth = Math.max(lineWidth, resultWidth);
-                resultHeight += lineHeight;
+                //遍历第一个的时候，肯定走的是不换行
+                resultHeight = Math.max(lineHeight, resultHeight);
+                childBound.set(lineWidth - childWidth, resultHeight - childHeight, lineWidth, resultHeight);
             }
-
-            setMeasuredDimension(modeWidth == MeasureSpec.EXACTLY ? sizeWidth : resultWidth,
-                    modeHeight == MeasureSpec.EXACTLY ? sizeHeight : resultHeight);
-
         }
+        setMeasuredDimension(modeWidth == MeasureSpec.EXACTLY ? sizeWidth : resultWidth,
+                modeHeight == MeasureSpec.EXACTLY ? sizeHeight : resultHeight);
 
     }
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-
-        int flowWidth = getWidth();
-
-        int childLeft = 0;
-        int childTop = 0;
-
-        //遍历子控件，记录每个子view的位置
-        for (int i = 0, childCount = getChildCount(); i < childCount; i++) {
-            View childView = getChildAt(i);
-
-            //跳过View.GONE的子View
-            if (childView.getVisibility() == View.GONE) {
-                continue;
-            }
-
-            //获取到测量的宽和高
-            int childWidth = childView.getMeasuredWidth();
-            int childHeight = childView.getMeasuredHeight();
-
-            //因为子View可能设置margin，这里要加上margin的距离
-            MarginLayoutParams mlp = (MarginLayoutParams) childView.getLayoutParams();
-
-            if (childLeft + mlp.leftMargin + childWidth + mlp.rightMargin > flowWidth) {
-                //换行处理
-                childTop += (mlp.topMargin + childHeight + mlp.bottomMargin);
-                childLeft = 0;
-            }
-            //布局
-            int left = childLeft + mlp.leftMargin;
-            int top = childTop + mlp.topMargin;
-            int right = childLeft + mlp.leftMargin + childWidth;
-            int bottom = childTop + mlp.topMargin + childHeight;
-            childView.layout(left, top, right, bottom);
-
-            childLeft += (mlp.leftMargin + childWidth + mlp.rightMargin);
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            Rect childBounds = mChildrenBounds.get(i);
+            child.layout(childBounds.left, childBounds.top, childBounds.right, childBounds.bottom);
         }
     }
 
